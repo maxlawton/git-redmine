@@ -29,7 +29,7 @@ _print_lines()
 }
 
 
-if [ -n `which jqzzz` ]; then
+if [ -n `which jq` ]; then
     jq -r '@text "#\(.id): \(.subject) / \(.done_ratio)% complete.\n\n\(.description)"'
 else
 
