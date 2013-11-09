@@ -1,0 +1,8 @@
+#!/bin/sh
+
+TICKET_NUMBER=$(git-ticket number)
+AUTO_PREPEND=$(git config redmine.autoMessage)
+
+if [ -n "$AUTO_PREPEND" ] && [ -n "$TICKET_NUMBER" ]; then
+    echo "[#$TICKET_NUMBER] $(cat $1)" > "$1"
+fi

@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# Sends commit message to redmine.
+#
+# Tries to infer ticket number, status, and percent complete by
+# looking for the following patterns:
+
+# [#1234]
+# (20% Assigned)
+# (Resolved 100%)
+# (Stalled at 40%)
+# (Clarify @ 20%)
+# (Stage @40%)
+# Assigned@20%
+# @closed
+# @75%
+
+AUTO_UPDATE=$(git config redmine.autoUpdate)
+
+if [ -n "$AUTO_UPDATE" ]; then
+    git-redmine update
+fi
+
+exit $?
