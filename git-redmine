@@ -1,0 +1,276 @@
+#!/bin/sh
+
+# ==========================================================================
+# Redmine utility functions
+# --------------------------------------------------------------------------
+
+_redmine_url()
+{
+    url_base=$(git config redmine.url)
+    endpoint="$1"
+
+    test -z "${url_base}" \
+        && echo "You must git-config the redmine.url setting." 1>&2 \
+        && exit 1
+
+    echo "${url_base}/${endpoint}"
+}
+
+
+_redmine_get_status()
+{
+    endpoint=$(_redmine_ticket_url $1)".json"
+    api_key=$(git config redmine.apiKey)
+    test -z "$api_key" \
+        && echo "You must git-config the redmine.apiKey setting." 1>&2 \
+        && exit 1
+
+    # "X-Redmine-API-Key: $api_key"
+    curl -s -d "key=${api_key}" -X GET "$endpoint" \
+        | _redmine_output_status
+}
+
+_redmine_ticket_url()
+{
+    url_base=$(git config redmine.url)
+    ticket="$1"
+
+    test -z "$ticket" && ticket=$(git-ticket number)
+
+    _redmine_url "issues/$ticket"
+}
+
+_redmine_status_id()
+{
+    case "$1" in
+              [Nn]ew|1) echo 1  ;;
+         [Aa]ssigned|2) echo 2  ;;
+         [Rr]esolved|3) echo 3  ;;
+           [Cc]lose?|5) echo 5  ;;
+         [Rr]ejected|6) echo 6  ;;
+             [Pp]ush|9) echo 9  ;;
+            [Hh]old|10) echo 10 ;;
+          [Qq]ueued|11) echo 11 ;;
+         [Cc]larify|12) echo 12 ;;
+         [Ss]talled|13) echo 13 ;;
+        [Ss]tage|[Ss]tage|14) echo 14 ;;
+                     *) echo "" ;;
+    esac
+}
+
+_redmine_handle_commit()
+{
+    msg=`cat`
+
+    update=$(echo "$msg" | _extract_update_data )
+    ticket=$(echo "$msg" | _extract_commit_ticket | tail -n1)
+    percent=$(echo "$update" | _extract_percent | tail -n1)
+    status=$(echo "$update"  | _extract_status | tail -n1)
+
+    [ -z "$ticket" ] && ticket="$1"
+    [ -z "$ticket" ] && ticket=$(git-ticket number)
+    [ -n "$ticket" ] && args="${ticket}";
+    [ -n "$percent" ] && args="${args} --percent ${percent}"
+    [ -n "$status" ] && args="${args} --status ${status}"
+
+    echo "$msg" | _redmine_update_status $args
+}
+
+_redmine_commit_updates()
+{
+    log="$@"
+    fmt="$(_ticket_log_format)"
+    test -z "$log" && log="-1 HEAD"
+    _git_log_get "$log" --pretty="$fmt" | _redmine_handle_commit
+}
+
+_redmine_update_status()
+{
+
+    api_key=$(git config redmine.apiKey)
+
+    test -z "$api_key" \
+        && echo "You must git-config the redmine.apiKey setting." 1>&2 \
+        && exit 1
+
+    test -z "$1" \
+        && echo "No ticket number supplied." 1>&2 \
+        && exit 1
+
+    ticket="$1"; shift
+
+    endpoint=$(_redmine_url "issues/${ticket}.json")
+
+    data="-d 'key=${api_key}'"
+
+    while [ $# -gt 0 ]
+    do
+        case "$1" in
+            '-p' | '--percent')
+                percent="$2"
+                test -n "${percent}" && data="${data} -d 'done_ratio=${percent}'"
+                shift ;;
+            '-s' | '--status')
+                status=$(_redmine_status_id $2)
+                test -n "${status}" && data="${data} -d 'status=${status}'"
+                shift ;;
+        esac
+        shift
+    done
+
+    if [ -z "$percent" ]; then
+        case "$status" in ("5"|"3") percent="100" ;; esac
+        test -n "${percent}" && data="${data} -d 'done_ratio=${percent}'"
+    fi
+    # --------------------------------------------------------------------------
+
+    header='-H "Content-Type: application/json"'
+
+    # "X-Redmine-API-Key: $api_key"
+    curl -v -X PUT "$header" "$data" --data-binary @- "$endpoint"
+}
+
+
+_redmine_output_status()
+{
+    out_cmd=$(git config redmine.outputCmd)
+
+    if [ -z "$out_cmd" ]; then
+        echo "You should set the redmine.outputCmd configuration." 1>&2
+        echo
+    elif [ -z `which $out_cmd` ]; then
+        echo "Couldn't find $out_cmd." 1>&2
+        cat && exit 1
+    else
+        $out_cmd
+    fi
+}
+
+# ==========================================================================
+# Ticket commit parsing functions
+# --------------------------------------------------------------------------
+_extract_commit_ticket()
+{
+    grep -o -e '\[#\d\+\]' | sed -e 's/\[\#\([0-9]\{1,\}\)\]/\1/'
+}
+
+_extract_update_data()
+{
+    grep -o \
+        -e '(\d\+% [a-zA-Z][a-z]\+)' \
+        -e '([a-zA-Z][a-z]\+ at \d\+%)' \
+        -e '([a-zA-Z][a-z]\+ @\?\s\?\d\+%)' \
+        -e '\([a-zA-Z][a-z]\+\)\?@\d\+%' \
+        -e '\W@[a-zA-Z][a-z]\+\([^.]\|$\)'
+}
+
+_extract_percent()
+{
+    sed -e 's/(\([0-9]\{1,\}\)% [A-Za-z]\{1,\})/\1/' \
+        -e 's/([A-Za-z]\{1,\} at \([0-9]\{1,\}\)%)/\1/' \
+        -e 's/([A-Za-z]\{1,\}\s@*\s*\([0-9]\{1,\}\)%)/\1/' \
+        -e 's/[A-Za-z]*@\([0-9]\{1,\}\)%/\1/'
+}
+
+_extract_status()
+{
+    sed -e 's/([0-9]\{1,\}% \([A-Za-z]\{1,\}\))/\1/' \
+        -e 's/(\([A-Za-z]\{1,\}\) at [0-9]\{1,\}%)/\1/' \
+        -e 's/(\([A-Za-z]\{1,\}\)\s@*\s*[0-9]\{1,\}%)/\1/' \
+        -e 's/\([A-Za-z]\{1,\}\)@[0-9]\{1,\}%/\1/' \
+        -e 's/@\([A-Za-z]\{1,\}\)/\1/'
+}
+
+# ==========================================================================
+# Git macros
+# --------------------------------------------------------------------------
+
+_git_log_get()
+{
+    git log "$@"
+}
+
+_ticket_log_format()
+{
+    default="format:|_>. commit:%h | %ad | %ae |%n%nbq. %s%n"
+    pretty=$(git config redmine.pretty)
+    pretty=${pretty:-$default}
+    echo "$pretty"
+}
+
+
+# ==========================================================================
+# The Subcommands
+# --------------------------------------------------------------------------
+
+
+usage()
+{
+	echo "usage: git redmine <subcommand>"
+	echo
+	echo "Available subcommands are:"
+	# echo "   list    Show all of your ticket/#... branches."
+	# echo "   open    Create or switch to a ticket branch."
+	echo "   browse  Launch the Redmine page for current ticket in whatever browser git uses."
+	# echo "   stage   Manage your hotfix branches."
+	# echo "   close   Merge and delete current ticket branch branches."
+	echo "   status  Show information about a ticket from Redmine."
+	# echo
+}
+
+main()
+ {
+	if [ $# -lt 1 ]; then
+		usage
+		exit 1
+	fi
+
+    case "$1" in
+
+        view|browse)
+            shift
+
+            if [ "$#" -gt 1 ]; then
+                part=$(echo "${@: -1}" | grep -o -e '^\d\+$')
+                if test -n "$part"; then
+                    url=$(_redmine_ticket_url "$part")
+                    params=${@:0:-1}
+                fi
+            fi
+
+            if test -z "$url"; then
+                url=${url:-$(_redmine_ticket_url)}
+                params=${params:-$@}
+            fi
+
+            git web--browse "$params" "$url"
+            exit $?
+            ;;
+
+        update)
+            shift
+            _redmine_commit_updates "$@"
+            exit $?
+            ;;
+
+        handle-commit)
+            shift
+            _redmine_handle_commit
+            ;;
+
+        status)
+            ticket=$(git-ticket number)
+            test -n "$ticket" \
+                && _redmine_get_status "$ticket"
+            exit $?
+            ;;
+
+
+        *) usage ; exit 1 ;;
+
+    esac
+
+    exit $?
+}
+
+main "$@"

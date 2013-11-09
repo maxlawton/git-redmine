@@ -1,0 +1,149 @@
+#!/bin/sh
+
+
+# ==========================================================================
+# Basic ticket information functions
+# --------------------------------------------------------------------------
+
+_ticket_name()
+{
+    echo "ticket/#${1}"
+}
+
+_ticket_number()
+{
+    git branch 2>/dev/null \
+        | grep -e '^* ticket' \
+        | sed -e 's/* ticket[\/-]#\([0-9]\{1,\}\)/\1/'
+}
+
+_current_branch()
+{
+    git branch 2>/dev/null \
+        | grep -e '^* ' \
+        | sed -e 's/* \(.*\)/\1/'
+}
+
+_branch_exists()
+{
+    test ! `git show-ref --verify --quiet refs/heads/"$1"`
+}
+
+
+# ==========================================================================
+# Git macros
+# --------------------------------------------------------------------------
+_git_delete_branch()
+{
+    branch=$1
+    test -z $branch && echo "branch required." 1>&2 && exit 1
+    git branch -D $branch
+    git branch -d -r origin/$branch
+    git push origin :refs/heads/$branch
+}
+
+
+# ==========================================================================
+# The Subcommands
+# --------------------------------------------------------------------------
+
+
+usage()
+{
+	echo "usage: git ticket <number|subcommand>"
+	echo
+	echo "Available subcommands are:"
+    echo "   number  Get the number of the current ticket."
+	echo "   list    Show all of your ticket/#... branches."
+	echo "   open    Create or switch to a ticket branch."
+	echo "   browse  Launch the Redmine page for current ticket in whatever browser git uses."
+	echo "   status  Show information about a ticket from Redmine."
+	# echo "   stage*  Manage your hotfix branches."
+	# echo "   close*  Merge and delete current ticket branch branches."
+	echo
+}
+
+
+main()
+ {
+	if [ $# -lt 1 ]; then
+		usage
+		exit 1
+	fi
+
+    case "$1" in
+
+        number|no)
+            ticket=$(_ticket_number)
+            branch=$(_current_branch)
+            test -z "$ticket" \
+                && echo "'$branch' is not a ticket branch." 1>&2 \
+                && exit 1
+            echo "$ticket"
+            exit $?
+            ;;
+
+        list)
+            git branch | grep -e 'ticket[/-]#\d\+'
+            ;;
+
+        view|browse|update|status)
+            git-redmine "$@"
+            exit $?
+            ;;
+
+        stage)
+            shift;
+            test -z $1 \
+                && echo "ticket <number> required." 1>&2 \
+                && exit 1
+
+            number="$1"; shift
+            percent=$(echo "${1:-100}" | sed -e 's/\([0-9]\{1,\}\)$/\1%/')
+            branch=$(_ticket_name "$number")
+            echo git merge --no-ff -e $branch -m"[#${number}] -- Stage@${percent}"
+            ;;
+
+        close)
+            test -z $2 \
+                && echo "ticket <number> required." 1>&2 \
+                && exit 1
+            branch=$(_ticket_name $2)
+            git merge --no-ff -e $branch -m"[#${number}] -- Closed@${percent}" \
+                && _git_delete_branch $branch
+            ;;
+
+        delete)
+            test -z $2 \
+                && echo "ticket <number> required." 1>&2 \
+                && exit 1
+            branch=$(_ticket_name $2)
+            echo "You're gonna have to pull the trigger yourself:"
+            echo git branch -D $branch
+            ;;
+
+        create)
+            echo "Ticket creation is not supported." 1>&2 \
+                && exit 1
+            #_curl_redmine_create "${@:2}"
+            ;;
+
+        *|open|start|switch)
+            case "$1" in
+                ("start"|"open"|"switch") shift;;
+            esac
+            test -z $1 && echo "ticket <number> required." && exit 1
+            branch=$(_ticket_name $1)
+            if test ! $(_branch_exists $branch); then
+                git checkout -b $branch &> /dev/null
+            else
+                git checkout $branch &> /dev/null
+            fi
+            exit $?
+            ;;
+    esac
+
+    exit $?
+}
+
+main "$@"
