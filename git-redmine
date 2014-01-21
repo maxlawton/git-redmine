@@ -30,6 +30,21 @@ _redmine_get_status()
         | _redmine_output_status
 }
 
+_redmine_get_subject()
+{
+    endpoint=$(_redmine_ticket_url $1)".json"
+    api_key=$(git config redmine.apiKey)
+    test -z "$api_key" \
+        && echo "You must git-config the redmine.apiKey setting." 1>&2 \
+        && exit 1
+
+    curl -s -d "key=${api_key}" -X GET "$endpoint" \
+        | awk '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' \
+        | grep -o -e '"subject":".*"' \
+        | sed -e 's/"subject":"\?\(.*[^"]\)"\?$/\1/'
+        # | cat
+}
+
 _redmine_ticket_url()
 {
     url_base=$(git config redmine.url)
@@ -56,6 +71,19 @@ _redmine_status_id()
         [Ss]tage|[Ss]tage|14) echo 14 ;;
                      *) echo "" ;;
     esac
+}
+
+_redmine_copy_log_and_browse()
+{
+    qry="$@"
+    fmt="$(_ticket_log_format)"
+    test -z "$qry" && qry="-1 HEAD"
+    log=$(_git_log_get "$qry" --pretty="$fmt")
+
+    ticket=$(echo "$log" | _extract_commit_ticket | tail -n1)
+    echo "$log" | pbcopy
+    git web--browse $(_redmine_ticket_url "$ticket")
+    exit $?
 }
 
 _redmine_handle_commit()
@@ -86,6 +114,7 @@ _redmine_commit_updates()
 
 _redmine_update_status()
 {
+    msg=`cat`
 
     api_key=$(git config redmine.apiKey)
 
@@ -99,20 +128,23 @@ _redmine_update_status()
 
     ticket="$1"; shift
 
-    endpoint=$(_redmine_url "issues/${ticket}.json")
+    endpoint=$(_redmine_url "issues/${ticket}.xml")
 
     data="-d 'key=${api_key}'"
+
+    status=""
+    percent=""
 
     while [ $# -gt 0 ]
     do
         case "$1" in
             '-p' | '--percent')
                 percent="$2"
-                test -n "${percent}" && data="${data} -d 'done_ratio=${percent}'"
+                # test -n "${percent}" && data="${data} -d 'done_ratio=${percent}'"
                 shift ;;
             '-s' | '--status')
                 status=$(_redmine_status_id $2)
-                test -n "${status}" && data="${data} -d 'status=${status}'"
+                # test -n "${status}" && data="${data} -d 'status_id=${status}'"
                 shift ;;
         esac
         shift
@@ -120,14 +152,31 @@ _redmine_update_status()
 
     if [ -z "$percent" ]; then
         case "$status" in ("5"|"3") percent="100" ;; esac
-        test -n "${percent}" && data="${data} -d 'done_ratio=${percent}'"
     fi
+
+    done_ratio=""
+    status_id=""
+
+    [ -n "$percent" ] && done_ratio="<done_ratio>${done_ratio}</done_ratio>"
+    [ -n "$status" ] && status_id="<statis_id>${done_ratio}</status_id>"
+
     # --------------------------------------------------------------------------
 
-    header='-H "Content-Type: application/json"'
+    read -d '' xml <<-EOF
+      <?xml version="1.0"?>
+      <issue>
+        <notes>$msg</notes>
+        $done_ratio
+        $status_id
+      </issue>
+EOF
+
 
     # "X-Redmine-API-Key: $api_key"
-    curl -v -X PUT "$header" "$data" --data-binary @- "$endpoint"
+    # echo "$xml"
+
+    echo curl -v -X PUT -H "Content-Type: application/xml" \
+          $data --data-binary @- $endpoint
 }
 
 
@@ -137,7 +186,7 @@ _redmine_output_status()
 
     if [ -z "$out_cmd" ]; then
         echo "You should set the redmine.outputCmd configuration." 1>&2
-        echo
+        cat && exit 1
     elif [ -z `which $out_cmd` ]; then
         echo "Couldn't find $out_cmd." 1>&2
         cat && exit 1
@@ -192,7 +241,8 @@ _git_log_get()
 
 _ticket_log_format()
 {
-    default="format:|_>. commit:%h | %ad | %ae |%n%nbq. %s%n"
+    #"format:|_>. commit:%h | %ad | %ae |%n%nbq. %s%n"
+    default="format:| commit:%h | %ad | %ae |%n%n%s%n%n%b%n"
     pretty=$(git config redmine.pretty)
     pretty=${pretty:-$default}
     echo "$pretty"
@@ -239,11 +289,21 @@ main()
             fi
 
             if test -z "$url"; then
-                url=${url:-$(_redmine_ticket_url)}
+                url=$(_redmine_ticket_url)
                 params=${params:-$@}
             fi
 
-            git web--browse "$params" "$url"
+            if test -n "$params"; then
+                git web--browse "$params" "$url"
+            else
+                git web--browse "$url"
+            fi
+            exit $?
+            ;;
+
+        edit)
+            shift
+            _redmine_copy_log_and_browse "$@"
             exit $?
             ;;
 
@@ -258,10 +318,17 @@ main()
             _redmine_handle_commit
             ;;
 
+        subject|title)
+            shift
+            test -n "$1" && ticket="$1"
+            test -z "$ticket" && ticket=$(git-ticket number)
+            test -z "$ticket" && exit 1
+            _redmine_get_subject "$ticket"
+            ;;
+
         status)
             ticket=$(git-ticket number)
-            test -n "$ticket" \
-                && _redmine_get_status "$ticket"
+            test -n "$ticket" && _redmine_get_status "$ticket"
             exit $?
             ;;
 
