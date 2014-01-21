@@ -26,22 +26,44 @@ _current_branch()
 
 _branch_exists()
 {
-    test ! `git show-ref --verify --quiet refs/heads/"$1"`
+    `git show-ref --verify --quiet refs/heads/"$1"` \
+        && echo !$?
 }
 
+_remote_branch_exists()
+{
+    `git show-ref --verify --quiet remotes/origin/"$1"` \
+        && echo !$?
+}
 
 # ==========================================================================
 # Git macros
 # --------------------------------------------------------------------------
+
 _git_delete_branch()
 {
     branch=$1
     test -z $branch && echo "branch required." 1>&2 && exit 1
-    git branch -D $branch
-    git branch -d -r origin/$branch
-    git push origin :refs/heads/$branch
+    if [ $(_branch_exists $branch) ]; then
+        git branch -d $branch
+    else
+        echo "No local branch '$branch' to delete." 1>&2 && exit 1
+    fi
+    if [ $(_remote_branch_exists $branch) ]; then
+        git branch -d -r origin/$branch
+        git push origin :refs/heads/$branch
+    else
+        echo "No remote branch of ${branch}." 1>&2 && exit 1
+    fi
+    exit 0
 }
 
+_git_count_incoming()
+{
+    branch=$1
+    current=$(_current_branch)
+    git log --pretty=%p "$branch" "^$current" | wc -l
+}
 
 # ==========================================================================
 # The Subcommands
@@ -76,18 +98,18 @@ main()
         number|no)
             ticket=$(_ticket_number)
             branch=$(_current_branch)
-            test -z "$ticket" \
-                && echo "'$branch' is not a ticket branch." 1>&2 \
-                && exit 1
+            test -z "$ticket" && exit 1
+            # && echo "'$branch' is not a ticket branch." 1>&2
             echo "$ticket"
             exit $?
             ;;
 
         list)
-            git branch | grep -e 'ticket[/-]#\d\+'
+            shift;
+            git branch "$@" | grep -e 'ticket[/-]#\d\+'
             ;;
 
-        view|browse|update|status)
+        view|browse|update|status|subject|edit)
             git-redmine "$@"
             exit $?
             ;;
@@ -99,27 +121,52 @@ main()
                 && exit 1
 
             number="$1"; shift
+            subject=$(git-redmine subject "$number")
             percent=$(echo "${1:-100}" | sed -e 's/\([0-9]\{1,\}\)$/\1%/')
             branch=$(_ticket_name "$number")
-            echo git merge --no-ff -e $branch -m"[#${number}] -- Stage@${percent}"
+
+            if [ $(_git_count_incoming $branch) -gt 1 ]; then
+                git merge --no-ff $branch -e -m"[#${number}] ${subject} (Staged ${percent})"
+            else
+                git merge $branch
+            fi
+            exit 0
             ;;
 
         close)
-            test -z $2 \
+            shift;
+            test -z $1 \
                 && echo "ticket <number> required." 1>&2 \
                 && exit 1
-            branch=$(_ticket_name $2)
-            git merge --no-ff -e $branch -m"[#${number}] -- Closed@${percent}" \
-                && _git_delete_branch $branch
+            number="$1"; shift
+            subject=$(git-redmine subject "$number")
+            branch=$(_ticket_name "$number")
+            percent=$(echo "${1:-100}" | sed -e 's/\([0-9]\{1,\}\)$/\1%/')
+
+            if [ $(_git_count_incoming $branch) -gt 1 ]; then
+                git merge --no-ff $branch -e -m"[#${number}] ${subject} (Closed ${percent})" \
+                    && _git_delete_branch $branch
+            else
+                git merge $branch && _git_delete_branch $branch
+            fi
+            exit 0
             ;;
 
-        delete)
+        not-in)
+            shift
+            other="${1:-dev-master}"
+            current=$(_current_branch)
+            git log "$(_current_branch)" "^$other"
+            ;;
+
+        delete|del)
             test -z $2 \
                 && echo "ticket <number> required." 1>&2 \
                 && exit 1
             branch=$(_ticket_name $2)
-            echo "You're gonna have to pull the trigger yourself:"
-            echo git branch -D $branch
+            _git_delete_branch $branch
+            # echo "You're gonna have to pull the trigger yourself:"
+            # echo git branch -D $branch
             ;;
 
         create)
@@ -132,9 +179,14 @@ main()
             case "$1" in
                 ("start"|"open"|"switch") shift;;
             esac
-            test -z $1 && echo "ticket <number> required." && exit 1
-            branch=$(_ticket_name $1)
-            if test ! $(_branch_exists $branch); then
+
+            if [ ! -z "${1##*[!0-9]*}" ]; then
+                branch=$(_ticket_name $1)
+            else
+                echo "ticket <number> required." && exit 1
+            fi
+
+            if [ ! $(_branch_exists $branch) ]; then
                 git checkout -b $branch &> /dev/null
             else
                 git checkout $branch &> /dev/null
