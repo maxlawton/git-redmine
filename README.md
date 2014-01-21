@@ -25,13 +25,13 @@ Configuration
 # git-redmine sample configuration
 
 [alias]
-	tk = ticket
-    red = redmine
+	tk = "ticket"
+    red = "redmine"
 
 [redmine]
-	apiKey = e9d350be1db2c11ed500d6fd1d9d7d1d
-    url = http://tracking.example.com
-    outputCmd = redmine-output.sh
+	apiKey = "e9d350be1db2c11ed500d6fd1d9d7d1d"
+    url = "http://tracking.example.com"
+    outputCmd = "redmine-status-output.sh"
     autoMessage = true
     autoUpdate = false
 ```
