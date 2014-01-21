@@ -15,23 +15,23 @@ Place the following files somewhere in your **$PATH**
 Add these to your hooks template directory. You'll need to re-init any existing repos.
 
   * [`hooks/post-commit`](hooks/post-commit)
-  * [`hooks/prepare-commit-msg`](hooks/post-commit)
+  * [`hooks/prepare-commit-msg`](hooks/prepare-commit-msg)
 
 
 Configuration
 -------------
 
-```ini
+```
 # git-redmine sample configuration
 
 [alias]
-	tk = "ticket"
-    red = "redmine"
+    tk = ticket
+    red = redmine
 
 [redmine]
-	apiKey = "e9d350be1db2c11ed500d6fd1d9d7d1d"
-    url = "http://tracking.example.com"
-    outputCmd = "redmine-status-output.sh"
+    apiKey = e9d350be1db2c11ed500d6fd1d9d7d1d
+    url = http://tracking.example.com
+    outputCmd = redmine-status-output.sh
     autoMessage = true
     autoUpdate = false
 ```
