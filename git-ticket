@@ -7,14 +7,14 @@
 
 _ticket_name()
 {
-    echo "ticket/#${1}"
+    echo "ticket/${1}"
 }
 
 _ticket_number()
 {
     git branch 2>/dev/null \
         | grep -e '^* ticket' \
-        | sed -e 's/* ticket[\/-]#\([0-9]\{1,\}\)/\1/'
+        | sed -e 's/* ticket[\/-]\([0-9]\{1,\}\)/\1/'
 }
 
 _current_branch()
@@ -106,7 +106,7 @@ main()
 
         list)
             shift;
-            git branch "$@" | grep -e 'ticket[/-]#\d\+'
+            git branch "$@" | grep -e 'ticket[/-]\d\+'
             ;;
 
         view|browse|update|status|subject|edit)
