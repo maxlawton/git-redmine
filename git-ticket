@@ -80,8 +80,8 @@ usage()
 	echo "   open    Create or switch to a ticket branch."
 	echo "   browse  Launch the Redmine page for current ticket in whatever browser git uses."
 	echo "   status  Show information about a ticket from Redmine."
-	# echo "   stage*  Manage your hotfix branches."
-	# echo "   close*  Merge and delete current ticket branch branches."
+	echo "   stage*  Merge a ticket's changes into current branch."
+	echo "   close*  Merge and delete specified ticket's branches."
 	echo
 }
 
