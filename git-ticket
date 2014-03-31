@@ -106,7 +106,7 @@ main()
 
         list)
             shift;
-            git branch "$@" | grep -e 'ticket[/-]\d\+'
+            git branch "$@" | grep -e 'ticket[/-]#\?[0-9]\+'
             ;;
 
         view|browse|update|status|subject|edit)
