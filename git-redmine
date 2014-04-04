@@ -327,8 +327,11 @@ main()
             ;;
 
         status)
-            ticket=$(git-ticket number)
-            test -n "$ticket" && _redmine_get_status "$ticket"
+            shift
+            test -n "$1" && ticket="$1"
+            test -z "$ticket" && ticket=$(git-ticket number)
+            test -z "$ticket" && exit 1
+            _redmine_get_status "$ticket"
             exit $?
             ;;
 
