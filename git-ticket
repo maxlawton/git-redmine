@@ -85,26 +85,26 @@ _git_count_incoming()
 
 usage()
 {
-	echo "usage: git ticket <number|subcommand>"
-	echo
-	echo "Available subcommands are:"
+    echo "usage: git ticket <number|subcommand>"
+    echo
+    echo "Available subcommands are:"
     echo "   number  Get the number of the current ticket."
-	echo "   list    Show all of your ticket/#... branches."
-	echo "   open    Create or switch to a ticket branch."
-	echo "   browse  Launch the tracking page for current ticket url."
-	echo "   status  Show information about a ticket from tracking system."
-	echo "   stage*  Merge a ticket's changes into current branch."
-	echo "   close*  Merge and delete specified ticket's branches."
-	echo
+    echo "   list    Show all of your ticket/#... branches."
+    echo "   open    Create or switch to a ticket branch."
+    echo "   browse  Launch the tracking page for current ticket url."
+    echo "   status  Show information about a ticket from tracking system."
+    echo "   stage*  Merge a ticket's changes into current branch."
+    echo "   close*  Merge and delete specified ticket's branches."
+    echo
 }
 
 
 main()
  {
-	if [ $# -lt 1 ]; then
-		usage
-		exit 1
-	fi
+    if [ $# -lt 1 ]; then
+        usage
+        exit 1
+    fi
 
     case "$1" in
 
