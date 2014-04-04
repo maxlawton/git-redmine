@@ -91,8 +91,8 @@ usage()
     echo "   number  Get the number of the current ticket."
 	echo "   list    Show all of your ticket/#... branches."
 	echo "   open    Create or switch to a ticket branch."
-	echo "   browse  Launch the Redmine page for current ticket in whatever browser git uses."
-	echo "   status  Show information about a ticket from Redmine."
+	echo "   browse  Launch the tracking page for current ticket url."
+	echo "   status  Show information about a ticket from tracking system."
 	echo "   stage*  Merge a ticket's changes into current branch."
 	echo "   close*  Merge and delete specified ticket's branches."
 	echo
