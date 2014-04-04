@@ -30,7 +30,7 @@ _print_lines()
 
 
 if [ -n `which jq` ]; then
-    jq -r '@text "#\(.id): \(.subject) / \(.done_ratio)% complete.\n\n\(.description)"'
+    jq -r '@text "#\(.id): \(.subject) / \(.done_ratio)% - \(.created_on)\n\n\(.description)"'
 else
 
     sed -e 's/[{}]/''/g' \
