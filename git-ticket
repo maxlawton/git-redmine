@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# ==========================================================================
+# Common functionality - from gitflow-common
+# --------------------------------------------------------------------------
+
+warn() { echo "$@" >&2; }
+die() { warn "$@"; exit 1; }
 
 # ==========================================================================
 # Basic ticket information functions
@@ -43,17 +49,17 @@ _remote_branch_exists()
 _git_delete_branch()
 {
     branch=$1
-    test -z $branch && echo "branch required." 1>&2 && exit 1
+    test -z $branch && die "branch required."
     if [ $(_branch_exists $branch) ]; then
         git branch -d $branch
     else
-        echo "No local branch '$branch' to delete." 1>&2 && exit 1
+        die "No local branch '$branch' to delete."
     fi
     if [ $(_remote_branch_exists $branch) ]; then
         git branch -d -r origin/$branch
         git push origin :refs/heads/$branch
     else
-        echo "No remote branch of ${branch}." 1>&2 && exit 1
+        die "No remote branch of ${branch}."
     fi
     exit 0
 }
@@ -116,9 +122,7 @@ main()
 
         stage)
             shift;
-            test -z $1 \
-                && echo "ticket <number> required." 1>&2 \
-                && exit 1
+            test -z $1 && die "ticket <number> required."
 
             number="$1"; shift
             subject=$(git-redmine subject "$number")
@@ -135,9 +139,7 @@ main()
 
         close)
             shift;
-            test -z $1 \
-                && echo "ticket <number> required." 1>&2 \
-                && exit 1
+            test -z $1 && die "ticket <number> required."
             number="$1"; shift
             subject=$(git-redmine subject "$number")
             branch=$(_ticket_name "$number")
@@ -160,9 +162,7 @@ main()
             ;;
 
         delete|del)
-            test -z $2 \
-                && echo "ticket <number> required." 1>&2 \
-                && exit 1
+            test -z $2 && die "ticket <number> required."
             branch=$(_ticket_name $2)
             _git_delete_branch $branch
             # echo "You're gonna have to pull the trigger yourself:"
@@ -170,8 +170,7 @@ main()
             ;;
 
         create)
-            echo "Ticket creation is not supported." 1>&2 \
-                && exit 1
+            die "Ticket creation is not supported."
             #_curl_redmine_create "${@:2}"
             ;;
 
@@ -183,7 +182,7 @@ main()
             if [ ! -z "${1##*[!0-9]*}" ]; then
                 branch=$(_ticket_name $1)
             else
-                echo "ticket <number> required." && exit 1
+                die "ticket <number> required."
             fi
 
             if [ ! $(_branch_exists $branch) ]; then
